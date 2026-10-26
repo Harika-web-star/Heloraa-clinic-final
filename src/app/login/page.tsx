@@ -9,11 +9,10 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     setLoading(true);
@@ -22,66 +21,99 @@ export default function LoginPage() {
     const supabase = createClient();
 
     try {
-      // 1. Login
+      // 1. Sign in
       const { data: authData, error: loginError } =
         await supabase.auth.signInWithPassword({
-          email,
+          email: email.trim(),
           password,
         });
 
       if (loginError) {
         setError(loginError.message);
-        setLoading(false);
         return;
       }
 
-      // 2. Make sure user exists
-      if (!authData.user) {
+      const user = authData.user;
+
+      if (!user) {
         setError("Login failed. User not found.");
-        setLoading(false);
         return;
       }
 
-      // 3. Get user's role
-      const { data: profile, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select("role, full_name")
-          .eq("id", authData.user.id)
-          .single();
+      // 2. Retrieve the user's profile and role
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, role, full_name")
+        .eq("id", user.id)
+        .maybeSingle();
 
       if (profileError) {
-        console.error("Login profile lookup failed", profileError?.code);
-
-        setError(
-          "Login successful, but your profile could not be found."
-        );
-
-        setLoading(false);
+        console.error("Profile lookup failed:", profileError.message);
+        setError("Unable to load your account profile. Please try again.");
         return;
       }
 
+      if (!profile) {
+        setError(
+          "Your account profile could not be found. Please contact support."
+        );
+        return;
+      }
 
-      // 4. Redirect according to role
+      // 3. Redirect according to role
       if (profile.role === "admin") {
         router.replace("/admin");
-      } else if (profile.role === "doctor") {
-        router.replace("/doctor");
-      } else if (profile.role === "patient") {
-        router.replace("/patient");
-      } else {
-        setError("Invalid user role.");
-        setLoading(false);
+        router.refresh();
+        return;
       }
-    } catch (error) {
-      console.error("Login failed", error instanceof Error ? error.message : "unknown error");
 
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Something went wrong while logging in."
+      if (profile.role === "doctor") {
+        router.replace("/doctor");
+        router.refresh();
+        return;
+      }
+
+      if (profile.role === "patient") {
+        // Check whether this patient already has a patient record.
+        const { data: patient, error: patientError } = await supabase
+          .from("patients")
+          .select("id")
+          .eq("profile_id", user.id)
+          .maybeSingle();
+
+        if (patientError) {
+          console.error("Patient lookup failed:", patientError.message);
+          setError(
+            "Unable to load your patient details. Please try signing in again."
+          );
+          return;
+        }
+
+        // Existing patient: go straight to the portal.
+        if (patient) {
+          router.replace("/patient");
+        } else {
+          // New patient without a health profile: complete onboarding.
+          router.replace("/patient/onboarding");
+        }
+
+        router.refresh();
+        return;
+      }
+
+      setError("Your account has an invalid or unsupported role.");
+    } catch (err) {
+      console.error(
+        "Login failed:",
+        err instanceof Error ? err.message : err
       );
 
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong while logging in."
+      );
+    } finally {
       setLoading(false);
     }
   };
@@ -90,7 +122,6 @@ export default function LoginPage() {
     <main className="page-shell min-h-screen bg-[#F8FAFC] px-4 py-10">
       <div className="flex min-h-[calc(100vh-5rem)] items-center justify-center">
         <div className="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl lg:grid-cols-2">
-
           {/* LEFT SIDE */}
           <div className="hidden bg-[#0A0D14] p-10 text-white lg:flex lg:flex-col lg:justify-between">
             <div>
@@ -100,10 +131,7 @@ export default function LoginPage() {
                 </div>
 
                 <div>
-                  <p className="font-semibold">
-                    Heloraa Clinic
-                  </p>
-
+                  <p className="font-semibold">Heloraa Clinic</p>
                   <p className="text-xs text-slate-400">
                     Connected healthcare
                   </p>
@@ -122,9 +150,8 @@ export default function LoginPage() {
                 </h1>
 
                 <p className="mt-6 max-w-md leading-7 text-slate-400">
-                  Manage appointments, medical records,
-                  medications and AI-assisted healthcare
-                  insights from one secure platform.
+                  Manage appointments, medical records, medications and
+                  AI-assisted healthcare insights from one secure platform.
                 </p>
               </div>
             </div>
@@ -132,23 +159,17 @@ export default function LoginPage() {
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="font-semibold">AI</p>
-                <p className="mt-1 text-xs text-slate-400">
-                  Assisted care
-                </p>
+                <p className="mt-1 text-xs text-slate-400">Assisted care</p>
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="font-semibold">RAG</p>
-                <p className="mt-1 text-xs text-slate-400">
-                  Medical context
-                </p>
+                <p className="mt-1 text-xs text-slate-400">Medical context</p>
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="font-semibold">Secure</p>
-                <p className="mt-1 text-xs text-slate-400">
-                  Patient data
-                </p>
+                <p className="mt-1 text-xs text-slate-400">Patient data</p>
               </div>
             </div>
           </div>
@@ -156,8 +177,6 @@ export default function LoginPage() {
           {/* RIGHT SIDE */}
           <div className="flex items-center p-8 sm:p-12">
             <div className="w-full">
-
-              {/* HEADER */}
               <div className="mb-8">
                 <p className="text-sm font-medium text-slate-500">
                   Secure access
@@ -172,23 +191,22 @@ export default function LoginPage() {
                 </p>
               </div>
 
-              {/* LOGIN FORM */}
-              <form
-                onSubmit={handleLogin}
-                className="space-y-5"
-              >
+              <form onSubmit={handleLogin} className="space-y-5">
                 {/* EMAIL */}
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                  <label
+                    htmlFor="email"
+                    className="mb-2 block text-sm font-medium text-slate-700"
+                  >
                     Email
                   </label>
 
                   <input
+                    id="email"
                     type="email"
+                    autoComplete="email"
                     value={email}
-                    onChange={(e) =>
-                      setEmail(e.target.value)
-                    }
+                    onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
                     required
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-[#0A0D14] focus:ring-2 focus:ring-slate-100"
@@ -197,17 +215,20 @@ export default function LoginPage() {
 
                 {/* PASSWORD */}
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                  <label
+                    htmlFor="password"
+                    className="mb-2 block text-sm font-medium text-slate-700"
+                  >
                     Password
                   </label>
 
                   <input
+                    id="password"
                     type="password"
+                    autoComplete="current-password"
                     value={password}
-                    onChange={(e) =>
-                      setPassword(e.target.value)
-                    }
-                    placeholder="••••••••"
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
                     required
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-[#0A0D14] focus:ring-2 focus:ring-slate-100"
                   />
@@ -225,7 +246,10 @@ export default function LoginPage() {
 
                 {/* ERROR */}
                 {error && (
-                  <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600">
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600"
+                  >
                     {error}
                   </div>
                 )}
@@ -236,9 +260,7 @@ export default function LoginPage() {
                   disabled={loading}
                   className="w-full rounded-xl bg-[#0A0D14] px-4 py-3.5 font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {loading
-                    ? "Signing in..."
-                    : "Sign in"}
+                  {loading ? "Signing in..." : "Sign in"}
                 </button>
               </form>
 
@@ -253,10 +275,8 @@ export default function LoginPage() {
                   Create account
                 </button>
               </div>
-
             </div>
           </div>
-
         </div>
       </div>
     </main>

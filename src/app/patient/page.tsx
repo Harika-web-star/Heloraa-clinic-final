@@ -19,11 +19,24 @@ export default async function PatientPage() {
     .eq("id", user.id)
     .single();
 
-  const { data: patient } = await supabase
+  
+  const {
+    data: patient,
+    error: patientError,
+  } = await supabase
     .from("patients")
-    .select("*")
+    .select("id, profile_id, date_of_birth, gender, blood_group")
     .eq("profile_id", user.id)
-    .single();
+    .maybeSingle();
+
+  if (patientError) {
+    console.error("Patient query failed:", patientError);
+  }
+
+console.log("Logged-in user ID:", user.id);
+console.log("Patient record:", patient);
+console.log("Patient query error:", patientError);
+
 
   const { data: appointments } = await supabase
     .from("appointments")
@@ -180,7 +193,18 @@ export default async function PatientPage() {
 
             </div>
 
-            <LogoutButton />
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/patient/onboarding?edit=1"
+                  className="flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-center text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                >
+                  Edit Profile
+                </Link>
+
+                <div className="flex-1">
+                  <LogoutButton />
+                </div>
+              </div>
 
           </div>
 
@@ -779,8 +803,17 @@ export default async function PatientPage() {
 
             </section>
 
-            <div className="mt-8 lg:hidden">
-              <LogoutButton />
+            <div className="mt-8 flex items-center gap-3 lg:hidden">
+              <Link
+                href="/patient/onboarding?edit=1"
+                className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-center text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                Edit Profile
+              </Link>
+
+              <div className="flex-1">
+                <LogoutButton />
+              </div>
             </div>
 
           </div>
